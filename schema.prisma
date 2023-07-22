@@ -1,23 +1,20 @@
 model User {
-  //THIS IS STRICTLY FOR WEB USERS LOGIN/AUTH
   id        Int      @id @default(autoincrement())
   email     String   @unique
   passHash  String
   role      Role     @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  //@@map("users")
 }
 
 model AdCampaign {
   id          Int              @id @default(autoincrement())
-  uuid        String           @default(uuid()) //May use this for URLs later.  Need to find a proper "short uuid" generator
+  uuid        String           @default(uuid())
   note        String?
   htmlContent String
   status      AdCampaignStatus @default(ACTIVE)
   type        AdCampaignType   @default(FREE)
-  expiresAt   DateTime?        @default(dbgenerated("NOW() + interval '30 days'")) // Default value is 30 days from now. 
+  expiresAt   DateTime?        @default(dbgenerated("NOW() + interval '30 days'"))
 
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -40,7 +37,6 @@ model GroupAds {
 }
 
 model BotGroup {
-  //BASICALLY TELEGRAM/DISCORD GROUPS
   id                     Int                     @id @default(autoincrement())
   platform               Platform
   channelId              String
@@ -51,9 +47,7 @@ model BotGroup {
   email                  String?
   preferredLanguage      SupportedLanguage       @default(GLOBALDEFAULT)
   pairSubscriptions      PairSubscription[]
-  // tokenSubscriptions     TokenSubscription[]
   notificationQueueItems NotificationQueueItem[]
-  // //@@map("bot_groups")
   GroupAds               GroupAds[]
 
   @@unique([platform, channelId], name: "platform_channel")
@@ -68,7 +62,6 @@ model PairSubscription {
   step          Float        @default(50)
   botGroupId    Int
   status        ActiveStatus @default(ACTIVE)
-  //USER-DEFINED VALUES (OR, MORE SPECIFICALLY, DIFFERENCES BETWEEN SUBSCRIPTIONS)
   manualSupply  Float?
   customImage   Json?
   showImage     Boolean      @default(false)
@@ -79,20 +72,15 @@ model PairSubscription {
 
   pairDetail PairMetadata @relation(references: [pairAddress, chain], fields: [pairAddress, pairChain])
   botGroup   BotGroup     @relation(references: [id], fields: [botGroupId], onDelete: Cascade)
-  //@@map("pair_subscriptions")
 
   @@unique([botGroupId, pairAddress, pairChain], name: "group_pair_chain")
 }
 model EvmTransaction {
-  //STICKING WITH BUYS ONLY FOR NOW
   id              Int           @id @default(autoincrement())
   blockHash       String?       @db.Citext
   blockNumber     String?
   contractAddress String        @db.Citext
   contractChain   Chain
-  // tokenPriceData  Json?
-  // chainValue      Float?
-  // details         Json?
   txHash          String        @db.Citext
   txData          Json?
   txReceipt       Json?
@@ -102,10 +90,7 @@ model EvmTransaction {
   processStatus   ProcessStatus @default(NEW)
 
   eventLogs DecodedTransactionLogEvent[]
-
-  // WARNING: MIGHT NOT WANT TO CASCADE HERE, BUT FINE FOR NOW
   pairDetail PairMetadata @relation(references: [pairAddress, chain], fields: [contractAddress, contractChain])
-  //@@map("evm_transactions")
 
   @@unique([txHash, contractChain], name: "hash_chain")
 }
@@ -114,7 +99,7 @@ model DecodedTransactionLogEvent {
   id         Int      @id @default(autoincrement())
   txHash     String   @db.Citext
   chain      Chain
-  eventName  String //['Transfer','Sync','Swap','Deposit', 'Unknown', etc . . .] Contracts may produce odd events that we can't account for but the ABI still decodes
+  eventName  String
   txIndex    Int
   logIndex   Int
   decodedLog Json?
@@ -122,7 +107,6 @@ model DecodedTransactionLogEvent {
   updatedAt  DateTime @updatedAt
 
   EvmTransaction EvmTransaction? @relation(fields: [txHash, chain], references: [txHash, contractChain], onDelete: Cascade)
-  //@@map("decoded_transaction_log_events")
 
   @@unique([txHash, txIndex, logIndex], name: "hash_tx_log")
 }
@@ -132,8 +116,6 @@ model NotificationQueueItem {
   botGroupId       Int
   messageCaption   String        @db.Text
   showSubImage     Boolean       @default(false)
-  //NOTE platformFileId is for referencing uploaded files (hopefully always an image) via the platform
-  //NOTE . . . MIGHT SHOULD ADD FILE ON SEND BUT WE WANT TO BUILD AS MUCH UP FRONT AS POSSIBLE, ALSO, THIS REMOVES POST-PROCESSING
   platformFileId   String?
   platformFileType String?
   createdAt        DateTime      @default(now())
@@ -141,7 +123,6 @@ model NotificationQueueItem {
   processStatus    ProcessStatus @default(NEW)
 
   botGroup BotGroup @relation(references: [id], fields: [botGroupId], onDelete: Cascade)
-  //@@map("notification_queue_items")
 }
 
 model CoinMarketCapListings {
@@ -157,8 +138,6 @@ model CoinMarketCapListings {
   total_supply       String?
   usd_market_cap     String?
   currency_quotes    String?   @db.Text
-  //@@map("coin_market_cap_listings")
-
   @@unique([cmc_id], name: "idx_cmc_id")
 }
 
@@ -172,13 +151,11 @@ model TokenMetadata {
   name        String?
   symbol      String?
   decimals    Int?
-  totalSupply String? //NOTE, THIS ISN'T THE SAME AS CIRCULATING SUPPLY BUT WE'RE GOING TO USE IT FOR NOW
+  totalSupply String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   moralisCloudSyncTable String?
-  //@@map("token_metadata")
-
   @@unique([address, chain], name: "tm_address_chain")
 }
 
@@ -190,7 +167,6 @@ model TokenBlockPrice {
   tokenPriceDetails Json
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  //@@map("token_block_prices")
 }
 
 model PairMetadata {
@@ -203,14 +179,13 @@ model PairMetadata {
   tokenOneMetadata    Json?
   source              Json?
   abi                 Json?
-  exchange            Exchange? //DOESN'T REALLY MAKE SENSE ON THE PAIR LEVEL AS YOU CAN'T "GUARANTEE" UNTIL YOU SEE IT DURING THE SWAP
+  exchange            Exchange?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   pairOrderIsReversed Boolean            @default(false)
-  status              ActiveStatus       @default(ACTIVE) //CURRENTLY (AS OF 2022-11-18) HAS NO EFFECT, BUT WE'LL BEGIN USING IT AS AN OVERRIDE SOON ENOUGH
+  status              ActiveStatus       @default(ACTIVE)
   PairSubscriptions   PairSubscription[]
   EvmTransactions     EvmTransaction[]
-  //@@map("pair_metadata")
 
   @@unique([pairAddress, chain], name: "pm_pair_chain")
 }
@@ -291,5 +266,15 @@ enum SupportedLanguage {
   VIETNAMESE
 }
 
-enum AdCampaignStatus { ACTIVE PAUSED CANCELED }
-enum AdCampaignType { FREE BASIC PLUS PREMIER ADMINISTRATIVE }
+enum AdCampaignStatus {
+  ACTIVE
+  PAUSED
+  CANCELED 
+}
+enum AdCampaignType { 
+  FREE
+  BASIC
+  PLUS
+  PREMIER
+  ADMINISTRATIVE
+}
