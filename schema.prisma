@@ -1,0 +1,280 @@
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  passHash  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdCampaign {
+  id          Int              @id @default(autoincrement())
+  uuid        String           @default(uuid())
+  note        String?
+  htmlContent String
+  status      AdCampaignStatus @default(ACTIVE)
+  type        AdCampaignType   @default(FREE)
+  expiresAt   DateTime?        @default(dbgenerated("NOW() + interval '30 days'"))
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  GroupAds  GroupAds[]
+}
+
+model GroupAds {
+  id           Int      @id @default(autoincrement())
+  adCampaignId Int
+  botGroupId   Int
+  startDate    DateTime
+  endDate      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  adCampaign AdCampaign @relation(references: [id], fields: [adCampaignId])
+  botGroup   BotGroup   @relation(fields: [botGroupId], references: [id])
+
+  @@unique([adCampaignId, botGroupId], name: "group_ad_idx")
+}
+
+model BotGroup {
+  id                     Int                     @id @default(autoincrement())
+  platform               Platform
+  channelId              String
+  channelTitle           String?
+  subscriptionTier       SubscriptionTier        @default(BASIC)
+  subscriptionStatus     ActiveStatus            @default(ACTIVE)
+  memberCount            Int?
+  email                  String?
+  preferredLanguage      SupportedLanguage       @default(GLOBALDEFAULT)
+  pairSubscriptions      PairSubscription[]
+  notificationQueueItems NotificationQueueItem[]
+  GroupAds               GroupAds[]
+
+  @@unique([platform, channelId], name: "platform_channel")
+}
+
+model PairSubscription {
+  id            Int          @id @default(autoincrement())
+  pairAddress   String       @db.Citext
+  pairChain     Chain
+  minBuy        Float?       @default(50)
+  icon          String       @default("🟢")
+  step          Float        @default(50)
+  botGroupId    Int
+  status        ActiveStatus @default(ACTIVE)
+  manualSupply  Float?
+  customImage   Json?
+  showImage     Boolean      @default(false)
+  showSells     Boolean      @default(true)
+  showDex       Boolean      @default(true)
+  showMarketCap Boolean      @default(true)
+  showLiquidity Boolean      @default(true)
+
+  pairDetail PairMetadata @relation(references: [pairAddress, chain], fields: [pairAddress, pairChain])
+  botGroup   BotGroup     @relation(references: [id], fields: [botGroupId], onDelete: Cascade)
+
+  @@unique([botGroupId, pairAddress, pairChain], name: "group_pair_chain")
+}
+model EvmTransaction {
+  id              Int           @id @default(autoincrement())
+  blockHash       String?       @db.Citext
+  blockNumber     String?
+  contractAddress String        @db.Citext
+  contractChain   Chain
+  txHash          String        @db.Citext
+  txData          Json?
+  txReceipt       Json?
+  blockTimeStamp  DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  processStatus   ProcessStatus @default(NEW)
+
+  eventLogs DecodedTransactionLogEvent[]
+  pairDetail PairMetadata @relation(references: [pairAddress, chain], fields: [contractAddress, contractChain])
+
+  @@unique([txHash, contractChain], name: "hash_chain")
+}
+
+model DecodedTransactionLogEvent {
+  id         Int      @id @default(autoincrement())
+  txHash     String   @db.Citext
+  chain      Chain
+  eventName  String
+  txIndex    Int
+  logIndex   Int
+  decodedLog Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  EvmTransaction EvmTransaction? @relation(fields: [txHash, chain], references: [txHash, contractChain], onDelete: Cascade)
+
+  @@unique([txHash, txIndex, logIndex], name: "hash_tx_log")
+}
+
+model NotificationQueueItem {
+  id               Int           @id @default(autoincrement())
+  botGroupId       Int
+  messageCaption   String        @db.Text
+  showSubImage     Boolean       @default(false)
+  platformFileId   String?
+  platformFileType String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  processStatus    ProcessStatus @default(NEW)
+
+  botGroup BotGroup @relation(references: [id], fields: [botGroupId], onDelete: Cascade)
+}
+
+model CoinMarketCapListings {
+  id                 Int       @id @default(autoincrement())
+  cmc_id             Int
+  address            String?   @db.Citext
+  name               String?
+  symbol             String?
+  slug               String?
+  market_pairs       String?
+  cmc_date           DateTime?
+  circulating_supply String?
+  total_supply       String?
+  usd_market_cap     String?
+  currency_quotes    String?   @db.Text
+  @@unique([cmc_id], name: "idx_cmc_id")
+}
+
+model TokenMetadata {
+  id          Int     @id @default(autoincrement())
+  address     String  @db.Citext
+  chain       Chain
+  metadata    Json?
+  source      Json?
+  abi         Json?
+  name        String?
+  symbol      String?
+  decimals    Int?
+  totalSupply String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  moralisCloudSyncTable String?
+  @@unique([address, chain], name: "tm_address_chain")
+}
+
+model TokenBlockPrice {
+  id                Int      @id @default(autoincrement())
+  blockNumber       String
+  tokenAddress      String   @db.Citext
+  tokenChain        Chain
+  tokenPriceDetails Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PairMetadata {
+  id                  Int                @id @default(autoincrement())
+  tokenZeroAddress    String             @db.Citext
+  tokenOneAddress     String             @db.Citext
+  pairAddress         String             @db.Citext
+  chain               Chain
+  tokenZeroMetadata   Json?
+  tokenOneMetadata    Json?
+  source              Json?
+  abi                 Json?
+  exchange            Exchange?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  pairOrderIsReversed Boolean            @default(false)
+  status              ActiveStatus       @default(ACTIVE)
+  PairSubscriptions   PairSubscription[]
+  EvmTransactions     EvmTransaction[]
+
+  @@unique([pairAddress, chain], name: "pm_pair_chain")
+}
+
+enum ProcessStatus {
+  NEW
+  PROCESSING
+  NOTIFIABLE
+  PROCESSINGNOTIFICATION
+  ISSUE
+  COMPLETE
+  IRRELEVANT
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum Platform {
+  TELEGRAM
+  DISCORD
+}
+
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PLUS
+  PREMIER
+  GLOBALADMIN
+}
+
+enum ActiveStatus {
+  ACTIVE
+  PAUSED
+  BLOCKED
+}
+
+enum Chain {
+  AVALANCHE
+  ARBITRUM
+  BSC
+  ETHEREUM
+  MATIC
+}
+
+enum Exchange {
+  UNKNOWN
+  UNISWAPV2
+  UNISWAPV3
+  TRADERJOE
+  QUICKSWAP
+  FSTSWAP
+  SUSHISWAPV2
+  PANCAKESWAPV1
+  PANCAKESWAPV2
+  BITKEEPSWAP
+  ONEINCHV4
+  BOGGEDFINANCE
+  CAMELOT
+}
+
+enum SupportedLanguage {
+  GLOBALDEFAULT
+  ARABIC
+  ENGLISH
+  CHINESE
+  GERMAN
+  DUTCH
+  FRENCH
+  RUSSIAN
+  SPANISH
+  INDONESIAN
+  JAPANESE
+  KOREAN
+  TURKISH
+  VIETNAMESE
+}
+
+enum AdCampaignStatus {
+  ACTIVE
+  PAUSED
+  CANCELED 
+}
+enum AdCampaignType { 
+  FREE
+  BASIC
+  PLUS
+  PREMIER
+  ADMINISTRATIVE
+}
